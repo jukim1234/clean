@@ -1,5 +1,5 @@
-import adapter from '@sveltejs/kit/node'; // 이 부분을 수정합니다
-import { vitePreprocess } from '@sveltejs/kit/vite';
+import adapter from '@sveltejs/adapter-auto'; // 'node' 대신 'adapter-auto'를 씁니다
+import { vitePreprocess } from '@sveltejs/vite-plugin-svelte'; // 위치를 이쪽으로 수정했습니다
 
 /** @type {import('@sveltejs/kit').Config} */
 const config = {
