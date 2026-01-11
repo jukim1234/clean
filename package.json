@@ -15,6 +15,7 @@
 		"@neoconfetti/svelte": "^2.2.1",
 		"@sveltejs/adapter-auto": "next",
 		"@sveltejs/kit": "next",
+		"@google/generative-ai": "latest",
 		"@types/cookie": "^0.6.0",
 		"@typescript-eslint/eslint-plugin": "^7.3.1",
 		"@typescript-eslint/parser": "^7.3.1",
