@@ -55,6 +55,7 @@
 	$: if (selectedHelper) {
 		if (selectedHelper === 'stepByStep') {
 			mainCategory = 'mindset';
+			// 중분류는 대분류가 확정된 후 categoryData를 참조하므로 약간의 텀을 주거나 직접 할당
 			subCategory = '실천 요령: 조금씩 꾸준히';
 		} else if (selectedHelper === 'spotCleaning') {
 			mainCategory = 'strategy';
@@ -62,6 +63,9 @@
 		} else if (selectedHelper === 'recycleGuide') {
 			mainCategory = 'recycle';
 			subCategory = '일반 분리수거 원칙';
+		} else if (selectedHelper === 'totalConsulting') {
+			mainCategory = 'strategy'; // 컨설팅은 전략으로 기본 설정
+			subCategory = '전반적 청소 전략 (방 전체)';
 		}
 	}
 
@@ -129,7 +133,8 @@
 	</section>
 
 	{#if selectedHelper}
-		<section class="selection-area">
+		<section class="selection-area" class:active={selectedHelper}>
+			<label>📁 상세 분야 설정</label>
 			<select bind:value={mainCategory}>
 				<option value="">대분류 선택</option>
 				<option value="mindset">마인드 및 기본 요령</option>

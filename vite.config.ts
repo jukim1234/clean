@@ -1,8 +1,9 @@
 import { sveltekit } from '@sveltejs/kit/vite';
-import type { UserConfig } from 'vite';
+import { defineConfig } from 'vite';
 
-const config: UserConfig = {
-	plugins: [sveltekit()]
-};
-
-export default config;
+export default defineConfig({
+	plugins: [sveltekit()],
+	server: {
+		allowedHosts: true // 모든 호스트 허용 (CodeSandbox 환경 대응)
+	}
+});
