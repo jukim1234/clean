@@ -2,8 +2,6 @@
 	import { onMount } from 'svelte';
 	//import { GoogleGenerativeAI } from '@google/generative-ai';
 
-	// 환경 변수에서 키 불러오기
-	const API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
 	let GoogleGenerativeAI;
 	let genAI; // = new GoogleGenerativeAI(API_KEY);
 
@@ -21,7 +19,14 @@
 		const module = await import('https://esm.run/@google/generative-ai');
 		GoogleGenerativeAI = module.GoogleGenerativeAI;
 
+		// 2. 키를 onMount 시점에 직접 가져옵니다 (지연 로딩 대응)
 		const API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
+
+		if (!API_KEY) {
+			console.error('API 키를 찾을 수 없습니다. Envs 설정을 확인하세요.');
+			resultText = '에러: API 키 설정이 누락되었습니다.';
+			return;
+		}
 		genAI = new GoogleGenerativeAI(API_KEY);
 		console.log('AI 라이브러리 로드 성공');
 	});
@@ -84,9 +89,30 @@
 		resultText = 'AI 도우미가 분석을 시작합니다...';
 
 		try {
-			const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
-			const stylePrompt = '[규칙] 별표(**) 기호 금지, 대괄호[]와 줄바꿈 활용.';
-			let prompt = `${stylePrompt}\n전문가 모드: [${mainCategory} - ${subCategory}]. 질문: ${userQuestion}`;
+			const model = genAI.getGenerativeModel({ model: 'gemini-flash-latest' });
+
+			// [1. 핵심 지침 복구] AI의 정체성과 서식을 강하게 규정합니다.
+			const styleInstruction = `
+[필수 역할] 당신은 15년 경력의 베테랑 '청소 및 정리 전문가'입니다. 
+모든 답변은 오직 '청소, 정리, 분리수거'와 관련된 관점에서만 답변해야 합니다. 
+만약 사용자가 청소와 관련 없는 질문(예: 외국어 공부, 요리 등)을 하면, "저는 청소 전문가로서 해당 분야는 잘 모르지만, 청소와 관련된 질문을 주시면 최선을 다해 돕겠습니다."라고 정중히 거절한 뒤, 질문을 청소 상황에 빗대어 조언하세요.
+
+[답변 규칙]
+- 별표(**) 기호를 절대 사용하지 마세요.
+- 중요한 항목은 대괄호 [ ]를 사용하세요.
+- 문단 사이에는 충분한 줄바꿈을 넣어주세요.
+`;
+
+			// [2. 상황별 프롬프트 구성]
+			let prompt = `${styleInstruction}\n\n현재 전문가 모드: [${mainCategory} - ${subCategory}].\n`;
+
+			if (imageInput.files[0]) {
+				prompt += `[상황] 사용자가 사진을 업로드했습니다. 사진 속의 오염도, 물건의 배치, 쓰레기 종류를 정밀 분석하여 단계별 청소 전략을 세워주세요. `;
+			} else {
+				prompt += `[상황] 사진이 없으므로 사용자의 질문에 기반하여 일반적인 청소 노하우를 제공하세요. `;
+			}
+
+			prompt += `\n사용자 질문: "${userQuestion}"`;
 
 			let parts = [prompt];
 			if (imageInput.files[0]) {
