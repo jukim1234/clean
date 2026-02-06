@@ -1,10 +1,10 @@
 <script>
 	/**
-	 * [ 뽀득 AI 전문 진단 시스템 v3.0: 제로 카테고리 & 인간적 피드백 ]
-	 * 1. 제로 카테고리: 첫 화면에 버튼 대신 "어떤 도움이 필요하신가요?"라는 질문으로 시작.
-	 * 2. 자동 분류: 고객의 첫 마디를 분석해 [공간/오염/배출/마인드셋] 중 하나로 자동 배정.
-	 * 3. 공감 피드백: 고객의 답변을 받으면 "그 부분은 정말 신경 쓰이시겠네요" 같은 피드백 후 다음 질문.
-	 * 4. 채팅 집중 UI: 질문-답변-피드백이 하나의 흐름으로 이어지며 몰입감 극대화.
+	 * [ 뽀득 AI 전문 진단 시스템 v3.2 통합본 ]
+	 * 1. v3.1 대화형 UI: 입력창이 대화 흐름 바로 밑에 위치
+	 * 2. v2.0 전문가 로직: 관리번호 생성, 제약 조건(3~5항목), 현장 체크리스트 포함
+	 * 3. v1.0 리포트 기능: 현장 사진을 포함한 HTML 진단서 다운로드 기능 부활
+	 * 4. 텍스트 정제: 출력 시 ** 표시 제거 및 표 형식 사용 금지 (가독성 최적화)
 	 */
 
 	import { onMount } from 'svelte';
@@ -12,37 +12,37 @@
 	let GoogleGenerativeAI;
 	let genAI;
 
-	// 상담 단계: 0(첫 인사), 1(주제 분석 및 분류), 2(상세 상황 질의), 3(최종 진단)
-	let step = 0;
+	let step = 0; 
 	let mainCategory = '';
-	let subTopic = '';
-	let userDetail = '';
+	let subTopic = ''; 
+	let currentReportId = ''; 
 	let chatLog = [
-		{
-			role: 'ai',
-			text: '안녕하세요, 뽀득 AI 상담 도우미입니다. 😊\n어떤 청소나 정리가 고민이신가요? 편하게 말씀해 주시면 제가 진단을 도와드릴게요.'
+		{ 
+			role: 'ai', 
+			text: "안녕하세요, 뽀득 AI 상담 도우미입니다. 😊\n어떤 부분의 청소가 고민이신가요? 우선 크게 고민되는 이슈를 간략히 말씀해 주시면 제가 다음 안내를 도와드릴게요.",
+			guide: "(예: 내 방 청소. 쓰레기가 많아요. / 방, 주방, 거실 청소 문의. 범위 선택 가능할지. / 기본적 청소 외에 창틀 곰팡이가 고민. / 분리 배출 방법이 너무 어려워요.)"
 		}
 	];
 
 	let userInput = '';
 	let isLoading = false;
-	let resultHtml = '';
+	let resultHtml = ''; // 화면 표시용
+	let rawAiResponse = ''; // 리포트 저장용 순수 텍스트
 	let imageInput;
+	let responseHistory = [];
 
-	// 분류용 키워드 맵
 	const categoryMap = {
-		space: ['이사', '입주', '거주', '전체', '부분', '아파트', '빌라'],
+		space: ['이사', '입주', '거주', '전체', '부분', '아파트', '방', '문의', '범위'],
 		stain: ['창틀', '곰팡이', '주방', '욕실', '기름때', '바닥', '얼룩', '니코틴'],
-		recycle: ['쓰레기', '분리수거', '가구', '가전', '버리기', '봉투', '배출'],
-		mind: ['귀찮', '막막', '포기', '방법', '루틴', '매일', '시작']
+		recycle: ['쓰레기', '분리수거', '가구', '가전', '버리기', '배출', '방법'],
+		mind: ['귀찮', '막막', '포기', '루틴', '매일', '시작']
 	};
 
-	// 피드백 맵 (인간적인 반응)
 	const feedbackMsgs = {
-		space: '공간 전체를 돌보는 건 정말 큰 일이죠. 꼼꼼한 계획이 필요하겠네요.',
-		stain: '특정 구역의 오염은 눈에 띌 때마다 스트레스가 크셨을 것 같아요.',
-		recycle: '분리수거는 알면 쉽지만 모르면 정말 헷갈리는 부분이죠. 제가 짚어드릴게요.',
-		mind: '청소를 시작하려는 그 마음 자체가 이미 절반은 성공하신 거예요!'
+		space: "공간 전체 혹은 핵심 구역을 정하는 게 우선이겠네요. 뽀득이 체계적으로 잡아드릴게요.",
+		stain: "특정 구역의 찌든 오염은 전문가의 장비와 약품이 필요한 영역이죠. 잘 말씀해주셨습니다.",
+		recycle: "분리 배출은 환경에도 중요하지만 정작 하려면 참 막막하죠. 깔끔하게 정리해 드릴게요.",
+		mind: "청소를 결심하신 것만으로도 대단하십니다. 가벼운 마음으로 시작하실 수 있게 도와드릴게요."
 	};
 
 	onMount(async () => {
@@ -51,38 +51,35 @@
 			GoogleGenerativeAI = module.GoogleGenerativeAI;
 			const API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
 			if (API_KEY) genAI = new GoogleGenerativeAI(API_KEY);
-		} catch (e) {
-			console.error('API 로드 실패', e);
-		}
+		} catch (e) { console.error("API 로드 실패", e); }
 	});
 
-	// 첫 답변을 통한 카테고리 자동 분류 및 피드백
+	function generateReportId() {
+		const now = new Date();
+		const dateStr = now.toISOString().slice(2, 10).replace(/-/g, '');
+		const randomStr = Math.random().toString(36).substring(2, 6).toUpperCase();
+		return `${dateStr}-${randomStr}`;
+	}
+
 	function processFirstInput() {
 		if (!userInput.trim()) return;
-
 		subTopic = userInput;
 		chatLog = [...chatLog, { role: 'user', text: userInput }];
-
-		// 키워드 분석으로 카테고리 매칭
-		mainCategory = 'stain'; // 기본값
+		
+		mainCategory = 'stain'; 
 		for (const [cat, keywords] of Object.entries(categoryMap)) {
-			if (keywords.some((k) => userInput.includes(k))) {
+			if (keywords.some(k => userInput.includes(k))) {
 				mainCategory = cat;
 				break;
 			}
 		}
 
 		const feedback = feedbackMsgs[mainCategory];
-		let nextQuestion = '';
-
-		if (mainCategory === 'space')
-			nextQuestion =
-				'현재 비어있는 집(이사/입주)인가요, 아니면 살고 계신 집인가요? 그리고 대략적인 평수도 알려주세요.';
-		else if (mainCategory === 'stain')
-			nextQuestion = '그 구역의 오염 상태는 어떤가요? (예: 곰팡이가 깊다, 기름때가 딱딱하다 등)';
-		else if (mainCategory === 'recycle')
-			nextQuestion = '어떤 물건을 버리려고 하시나요? 혹은 사진을 찍어 보여주셔도 좋습니다.';
-		else nextQuestion = '지금 가장 먼저 해결하고 싶은 한 곳만 고른다면 어디인가요?';
+		let nextQuestion = "";
+		if (mainCategory === 'space') nextQuestion = "현재 비어있는 집인가요, 아니면 살고 계신 상태인가요? 평수나 특이사항이 있다면 말씀해주세요.";
+		else if (mainCategory === 'stain') nextQuestion = "해당 오염이 발생한 지 얼마나 되었나요? 혹은 사진을 첨부해주시면 더 정확합니다.";
+		else if (mainCategory === 'recycle') nextQuestion = "버리시려는 물건의 종류나 대략적인 양을 말씀해주시겠어요?";
+		else nextQuestion = "지금 당장 5분만 투자한다면 가장 먼저 깨끗하게 만들고 싶은 곳은 어디인가요?";
 
 		setTimeout(() => {
 			chatLog = [...chatLog, { role: 'ai', text: `${feedback}\n\n${nextQuestion}` }];
@@ -93,15 +90,25 @@
 
 	async function runAI() {
 		if (!userInput.trim()) return;
-		userDetail = userInput;
-		chatLog = [...chatLog, { role: 'user', text: userInput }];
+		const detailInput = userInput;
+		chatLog = [...chatLog, { role: 'user', text: detailInput }];
 		isLoading = true;
 		userInput = '';
+		currentReportId = generateReportId();
 
 		try {
 			const model = genAI.getGenerativeModel({ model: 'gemini-flash-latest' });
-			const prompt = `[뽀득 전문가 모드]\n상황: ${subTopic} / 상세: ${userDetail}\n[미션] 사장님의 15년 노하우를 담아 아주 친절하고 전문적인 진단 리포트를 작성해줘.`;
+			
+			const styleInstruction = `
+				[역할] 15년 경력 청소 전문가. 
+				[규칙] 
+				1. ** 별표 기호나 표(Table) 형식을 절대 사용하지 마세요. 
+				2. 3~5개 항목 이내로 간결하고 핵심적인 텍스트 위주로 답변하세요.
+				3. 답변 마지막에 반드시 [작업자 현장 체크 리스트] 머리말과 함께 주의사항을 2~3줄 요약하세요.
+				4. 인사말은 생략하고 즉시 솔루션을 제시하세요.`;
 
+			let prompt = `${styleInstruction}\n\n[분류: ${mainCategory}]\n주제: ${subTopic}\n상황: ${detailInput}`;
+			
 			let parts = [prompt];
 			if (imageInput?.files[0]) {
 				const base64 = await new Promise((r) => {
@@ -113,19 +120,61 @@
 			}
 
 			const result = await model.generateContent(parts);
-			resultHtml = `<strong>✨ 뽀득 전문 진단 리포트 ✨</strong><br><br>${result.response.text().replace(/\n/g, '<br>')}`;
-			chatLog = [
-				...chatLog,
-				{ role: 'ai', text: '분석을 마쳤습니다. 아래 리포트를 확인해 주세요!' }
-			];
-		} catch (e) {
-			chatLog = [
-				...chatLog,
-				{ role: 'ai', text: '죄송해요, 분석 중에 살짝 문제가 생겼어요. 다시 시도해 볼까요?' }
-			];
-		} finally {
-			isLoading = false;
+			// ** 제거 및 정제
+			rawAiResponse = result.response.text().replace(/\*\*/g, '').replace(/\|/g, ''); 
+			
+			const fixedHeader = `<span class="highlight-text">진단이 완료되었습니다. 아래 리포트를 확인하고 저장해 주세요.</span>\n`;
+			resultHtml = fixedHeader + `<span style="font-size:12px;color:#888;">상담번호: ${currentReportId}</span>\n\n` + rawAiResponse.replace(/\n/g, '<br>');
+			
+			chatLog = [...chatLog, { role: 'ai', text: "진단 리포트 생성이 완료되었습니다. 아래 버튼을 눌러 확인해 보세요!", isReport: true }];
+		} catch (e) { 
+			chatLog = [...chatLog, { role: 'ai', text: "죄송합니다. 분석 중 오류가 발생했습니다." }];
+		} finally { isLoading = false; }
+	}
+
+	async function downloadReport() {
+		const date = new Date().toLocaleString();
+		let imgTag = '';
+		if (imageInput?.files[0]) {
+			const base64 = await new Promise((r) => {
+				const reader = new FileReader();
+				reader.onload = () => r(reader.result);
+				reader.readAsDataURL(imageInput.files[0]);
+			});
+			imgTag = `<div class="section-title">현장 사진</div><img src="${base64}" style="max-width:100%; border-radius:10px;">`;
 		}
+
+		const reportHtml = `
+		<!DOCTYPE html>
+		<html>
+		<head><meta charset="utf-8"><title>뽀득 AI 진단서</title>
+		<style>
+			body { font-family: sans-serif; line-height: 1.6; color: #333; padding: 20px; background: #f5f5f5; }
+			.paper { background: #fff; padding: 40px; max-width: 700px; margin: 0 auto; border-top: 8px solid #1a73e8; }
+			.title { color: #1a73e8; font-size: 24px; border-bottom: 2px solid #1a73e8; padding-bottom: 10px; }
+			.section-title { font-weight: bold; margin: 20px 0 10px; padding: 5px 10px; background: #f0f4f8; border-left: 4px solid #1a73e8; }
+			.content { white-space: pre-wrap; margin-bottom: 20px; }
+		</style>
+		</head>
+		<body>
+			<div class="paper">
+				<h1 class="title">AI 청소 사전 진단 리포트</h1>
+				<p>관리 번호: ${currentReportId} / 일시: ${date}</p>
+				<div class="section-title">상담 요약</div>
+				<div class="content">주제: ${subTopic}</div>
+				${imgTag}
+				<div class="section-title">전문가 처방전 및 현장 체크리스트</div>
+				<div class="content">${rawAiResponse}</div>
+				<p style="text-align:center; color:#888; font-size:12px;">본 리포트를 업체에 제시하시면 정확한 견적이 가능합니다.</p>
+			</div>
+		</body></html>`;
+
+		const blob = new Blob([reportHtml], { type: 'text/html' });
+		const url = URL.createObjectURL(blob);
+		const a = document.createElement('a');
+		a.href = url;
+		a.download = `뽀득진단서_${currentReportId}.html`;
+		a.click();
 	}
 </script>
 
@@ -135,233 +184,87 @@
 		<h1>뽀득 AI 상담실</h1>
 	</header>
 
-	<div class="chat-window">
-		{#each chatLog as chat}
-			<div class="msg {chat.role}">
-				<div
-					class="bubble {chat.role === 'ai' && chat.text.includes('진단 리포트')
-						? 'report-link'
-						: ''}"
-				>
-					{chat.text}
+	<div class="chat-container">
+		<div class="chat-window">
+			{#each chatLog as chat}
+				<div class="msg {chat.role}">
+					<div class="bubble">
+						{chat.text}
+						{#if chat.guide}
+							<div class="guide-text">{chat.guide}</div>
+						{/if}
+						{#if chat.isReport}
+							<button class="view-btn" on:click={() => step = 3}>📋 리포트 보기</button>
+						{/if}
+					</div>
+				</div>
+			{/each}
+
+			{#if isLoading}
+				<div class="msg ai"><div class="bubble loading">뽀득 전문가가 분석 중...</div></div>
+			{/if}
+			
+			{#if step < 3}
+			<div class="interactive-area fade-in">
+				{#if step === 2}
+					<div class="file-row">
+						<label for="file-up">📸 현장 사진 첨부 (권장)</label>
+						<input type="file" id="file-up" bind:this={imageInput} accept="image/*" />
+					</div>
+				{/if}
+				<div class="input-row">
+					<input type="text" bind:value={userInput} placeholder="메시지를 입력하세요..." on:keypress={(e) => e.key === 'Enter' && (step < 2 ? processFirstInput() : runAI())}/>
+					<button on:click={() => (step < 2 ? processFirstInput() : runAI())} disabled={isLoading}>전송</button>
 				</div>
 			</div>
-		{/each}
-
-		{#if isLoading}
-			<div class="msg ai">
-				<div class="bubble dot-loading">뽀득 전문가가 생각 중...</div>
-			</div>
-		{/if}
-	</div>
-
-	<div class="input-area">
-		{#if step === 2}
-			<div class="file-upload fade-in">
-				<label for="file-pc">📸 현장 사진 첨부 (선택)</label>
-				<input type="file" id="file-pc" bind:this={imageInput} accept="image/*" />
-			</div>
-		{/if}
-
-		<div class="input-box">
-			<input
-				type="text"
-				bind:value={userInput}
-				placeholder={step === 0
-					? '예: 이사 청소 문의해요, 창틀 곰팡이 해결법...'
-					: '상세하게 말씀해 주세요...'}
-				on:keypress={(e) => e.key === 'Enter' && (step < 2 ? processFirstInput() : runAI())}
-			/>
-			<button on:click={() => (step < 2 ? processFirstInput() : runAI())} disabled={isLoading}>
-				전송
-			</button>
+			{/if}
 		</div>
-
-		{#if step > 0}
-			<button
-				class="btn-reset"
-				on:click={() => {
-					step = 0;
-					chatLog = [chatLog[0]];
-					resultHtml = '';
-					userInput = '';
-				}}>처음으로</button
-			>
-		{/if}
 	</div>
 
-	{#if resultHtml}
-		<div class="result-viewer fade-in">
-			{@html resultHtml}
-			<button class="close-res" on:click={() => (resultHtml = '')}>닫기</button>
+	{#if step === 3}
+		<div class="result-modal fade-in">
+			<div class="modal-content">
+				<div class="res-body">{@html resultHtml}</div>
+				<div class="btn-group">
+					<button class="btn-down" on:click={downloadReport}>📄 리포트 저장(HTML)</button>
+					<button class="btn-close" on:click={() => step = 2}>닫기</button>
+				</div>
+			</div>
 		</div>
 	{/if}
 </div>
 
 <style>
-	:global(body) {
-		background: #f0f2f5;
-		font-family: 'Pretendard', sans-serif;
-		margin: 0;
-		padding: 0;
-	}
-	.app {
-		max-width: 500px;
-		margin: 0 auto;
-		background: #fff;
-		height: 100vh;
-		display: flex;
-		flex-direction: column;
-		position: relative;
-	}
-
-	header {
-		padding: 20px;
-		border-bottom: 1px solid #f0f0f0;
-		text-align: center;
-	}
-	.brand {
-		color: #1a73e8;
-		font-weight: 800;
-		font-size: 12px;
-		letter-spacing: 1px;
-	}
-	h1 {
-		font-size: 18px;
-		margin: 5px 0 0;
-		color: #333;
-	}
-
-	.chat-window {
-		flex: 1;
-		overflow-y: auto;
-		padding: 20px;
-		display: flex;
-		flex-direction: column;
-		gap: 15px;
-		background: #f9f9f9;
-	}
-	.msg {
-		display: flex;
-		flex-direction: column;
-	}
-	.msg.ai {
-		align-items: flex-start;
-	}
-	.msg.user {
-		align-items: flex-end;
-	}
-	.bubble {
-		max-width: 80%;
-		padding: 12px 16px;
-		border-radius: 18px;
-		font-size: 14px;
-		line-height: 1.6;
-		white-space: pre-wrap;
-		position: relative;
-	}
-	.msg.ai .bubble {
-		background: #fff;
-		color: #333;
-		border-top-left-radius: 2px;
-		box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
-	}
-	.msg.user .bubble {
-		background: #1a73e8;
-		color: #fff;
-		border-top-right-radius: 2px;
-	}
-
-	.input-area {
-		padding: 20px;
-		background: #fff;
-		border-top: 1px solid #eee;
-	}
-	.input-box {
-		display: flex;
-		gap: 10px;
-	}
-	input {
-		flex: 1;
-		padding: 12px 15px;
-		border: 1px solid #ddd;
-		border-radius: 25px;
-		outline: none;
-		font-size: 14px;
-	}
-	button {
-		background: #1a73e8;
-		color: white;
-		border: none;
-		padding: 10px 20px;
-		border-radius: 25px;
-		font-weight: bold;
-		cursor: pointer;
-	}
-
-	.file-upload {
-		margin-bottom: 10px;
-	}
-	.file-upload label {
-		font-size: 12px;
-		color: #666;
-		font-weight: bold;
-		cursor: pointer;
-		display: inline-block;
-		padding: 5px 10px;
-		background: #f0f0f0;
-		border-radius: 10px;
-	}
-	.file-upload input {
-		display: none;
-	}
-
-	.btn-reset {
-		width: 100%;
-		margin-top: 10px;
-		background: none;
-		color: #999;
-		font-size: 12px;
-		font-weight: normal;
-	}
-
-	.result-viewer {
-		position: absolute;
-		top: 10%;
-		left: 5%;
-		right: 5%;
-		bottom: 10%;
-		background: #fff;
-		border-radius: 25px;
-		box-shadow: 0 10px 50px rgba(0, 0, 0, 0.2);
-		padding: 30px;
-		overflow-y: auto;
-		z-index: 100;
-		border: 2px solid #1a73e8;
-	}
-	.close-res {
-		position: sticky;
-		bottom: 0;
-		width: 100%;
-		margin-top: 20px;
-		background: #333;
-	}
-
-	.dot-loading {
-		font-style: italic;
-		color: #888;
-	}
-	.fade-in {
-		animation: fadeIn 0.3s ease-in;
-	}
-	@keyframes fadeIn {
-		from {
-			opacity: 0;
-			transform: translateY(10px);
-		}
-		to {
-			opacity: 1;
-			transform: translateY(0);
-		}
-	}
+	:global(body) { background: #f5f7f9; font-family: 'Pretendard', sans-serif; margin: 0; }
+	.app { max-width: 480px; margin: 0 auto; background: #fff; height: 100vh; display: flex; flex-direction: column; position: relative; border-left: 1px solid #eee; border-right: 1px solid #eee; }
+	header { padding: 15px; border-bottom: 1px solid #eee; text-align: center; background: #fff; }
+	.brand { color: #1a73e8; font-weight: 800; font-size: 11px; letter-spacing: 1px; }
+	h1 { font-size: 17px; margin: 5px 0 0; color: #333; }
+	.chat-container { flex: 1; overflow-y: auto; padding: 15px; background: #f9f9f9; }
+	.chat-window { display: flex; flex-direction: column; gap: 12px; }
+	.msg { display: flex; flex-direction: column; }
+	.msg.ai { align-items: flex-start; }
+	.msg.user { align-items: flex-end; }
+	.bubble { max-width: 85%; padding: 12px 16px; border-radius: 18px; font-size: 14px; line-height: 1.5; white-space: pre-wrap; box-shadow: 0 2px 4px rgba(0,0,0,0.03); }
+	.msg.ai .bubble { background: #fff; color: #222; border-top-left-radius: 2px; }
+	.msg.user .bubble { background: #1a73e8; color: #fff; border-top-right-radius: 2px; }
+	.guide-text { margin-top: 10px; padding-top: 10px; border-top: 1px dashed #ddd; font-size: 12px; color: #666; }
+	.interactive-area { margin-top: 10px; }
+	.input-row { display: flex; gap: 8px; }
+	input { flex: 1; padding: 12px 18px; border: 1.5px solid #1a73e8; border-radius: 25px; outline: none; }
+	button { background: #1a73e8; color: white; border: none; padding: 0 20px; border-radius: 25px; font-weight: bold; cursor: pointer; }
+	.view-btn { margin-top: 10px; width: 100%; background: #34a853; font-size: 12px; }
+	.file-row { margin-bottom: 8px; }
+	.file-row label { font-size: 11px; color: #1a73e8; background: #e8f0fe; padding: 6px 12px; border-radius: 12px; cursor: pointer; display: inline-block; }
+	.file-row input { display: none; }
+	.result-modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); z-index: 1000; display: flex; align-items: center; justify-content: center; padding: 20px; }
+	.modal-content { background: #fff; width: 100%; max-width: 400px; max-height: 85vh; border-radius: 25px; padding: 25px; display: flex; flex-direction: column; }
+	.res-body { flex: 1; overflow-y: auto; font-size: 14px; line-height: 1.7; padding-right: 10px; }
+	.btn-group { display: flex; gap: 10px; margin-top: 20px; }
+	.btn-down { flex: 2; background: #34a853; }
+	.btn-close { flex: 1; background: #333; }
+	:global(.highlight-text) { color: #1a73e8; font-weight: bold; margin-bottom: 10px; display: block; }
+	.loading { font-style: italic; color: #1a73e8; }
+	.fade-in { animation: fadeIn 0.4s ease-out; }
+	@keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
 </style>
