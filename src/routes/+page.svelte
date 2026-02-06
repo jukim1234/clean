@@ -1,9 +1,9 @@
 <script>
 	/**
-	 * [ 뽀득 AI 전문 진단 시스템 v3.3 반영 사항 ]
-	 * 1. 문구 수정: "리포트 저장(채팅 상담시 보내주세요.)"으로 변경하여 실제 상담 전환 유도.
-	 * 2. 리포트 구성 변경: [상담 요약(주제)] 뒤에 [세부 문의] 항목 추가하여 상세 상황 기록.
-	 * 3. 텍스트 정제: 별표(**) 및 표 형식 제거 로직 유지.
+	 * [ 뽀득 AI 전문 진단 시스템 v3.4 최종 ]
+	 * 1. UI 가독성: 상담번호와 본문 사이 간격(빈 줄) 추가.
+	 * 2. 버튼 최적화: 저장 버튼 문구 간소화 및 상단 가이드 문구 수정.
+	 * 3. 리포트 정제: 하단 불필요한 안내 문구 삭제로 전문성 강화.
 	 */
 
 	import { onMount } from 'svelte';
@@ -14,7 +14,7 @@
 	let step = 0; 
 	let mainCategory = '';
 	let subTopic = ''; 
-	let userDetail = ''; // 세부 문의 내용 저장용
+	let userDetail = ''; 
 	let currentReportId = ''; 
 	let chatLog = [
 		{ 
@@ -89,7 +89,7 @@
 
 	async function runAI() {
 		if (!userInput.trim()) return;
-		userDetail = userInput; // 세부 문의 내용 저장
+		userDetail = userInput;
 		chatLog = [...chatLog, { role: 'user', text: userDetail }];
 		isLoading = true;
 		userInput = '';
@@ -114,8 +114,9 @@
 			const result = await model.generateContent(parts);
 			rawAiResponse = result.response.text().replace(/\*\*/g, '').replace(/\|/g, ''); 
 			
-			const fixedHeader = `<span class="highlight-text">진단이 완료되었습니다. 아래 리포트를 저장하여 상담 시 전달해 주세요.</span>\n`;
-			resultHtml = fixedHeader + `<span style="font-size:12px;color:#888;">상담번호: ${currentReportId}</span>\n\n` + rawAiResponse.replace(/\n/g, '<br>');
+			const fixedHeader = `<span class="highlight-text">진단이 완료되었습니다. 아래 리포트를 저장하여 채팅 상담 시 전달해 주세요.</span>\n`;
+			// 상담번호 다음에 빈 줄 한 줄 추가 (<br><br>)
+			resultHtml = fixedHeader + `<span style="font-size:12px;color:#888;">상담번호: ${currentReportId}</span><br><br>` + rawAiResponse.replace(/\n/g, '<br>');
 			
 			chatLog = [...chatLog, { role: 'ai', text: "진단 리포트가 준비되었습니다! 아래 버튼을 눌러 확인 후 저장해 주세요.", isReport: true }];
 		} catch (e) { 
@@ -161,11 +162,6 @@
 				
 				<div class="section-title">전문가 처방전 및 현장 체크리스트</div>
 				<div class="content">${rawAiResponse}</div>
-				
-				<div style="margin-top:40px; padding:20px; background:#e8f0fe; border-radius:10px; text-align:center;">
-					<p style="margin:0; font-weight:bold; color:#1a73e8;">사장님께 이 리포트를 전달해 주세요!</p>
-					<p style="margin:5px 0 0; font-size:13px; color:#555;">리포트를 상담창에 첨부하시면 훨씬 빠르고 정확한 견적이 가능합니다.</p>
-				</div>
 			</div>
 		</body></html>`;
 
@@ -226,7 +222,7 @@
 			<div class="modal-content">
 				<div class="res-body">{@html resultHtml}</div>
 				<div class="btn-group">
-					<button class="btn-down" on:click={downloadReport}>📄 리포트 저장(채팅 상담시 보내주세요.)</button>
+					<button class="btn-down" on:click={downloadReport}>📄 리포트 저장</button>
 					<button class="btn-close" on:click={() => step = 2}>닫기</button>
 				</div>
 			</div>
@@ -252,20 +248,19 @@
 	.interactive-area { margin-top: 10px; }
 	.input-row { display: flex; gap: 8px; }
 	input { flex: 1; padding: 12px 18px; border: 1.5px solid #1a73e8; border-radius: 25px; outline: none; font-size: 14px; }
-	button { background: #1a73e8; color: white; border: none; padding: 0 20px; border-radius: 25px; font-weight: bold; cursor: pointer; transition: 0.2s; }
-	button:hover { background: #1557b0; }
+	button { background: #1a73e8; color: white; border: none; padding: 0 20px; border-radius: 25px; font-weight: bold; cursor: pointer; }
 	.view-btn { margin-top: 10px; width: 100%; background: #34a853; font-size: 12px; padding: 10px; }
-	.file-row { margin-bottom: 8px; }
-	.file-row label { font-size: 11px; color: #1a73e8; background: #e8f0fe; padding: 6px 12px; border-radius: 12px; cursor: pointer; display: inline-block; font-weight: bold; }
-	.file-row input { display: none; }
-	.result-modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); z-index: 1000; display: flex; align-items: center; justify-content: center; padding: 20px; }
-	.modal-content { background: #fff; width: 100%; max-width: 420px; max-height: 85vh; border-radius: 25px; padding: 25px; display: flex; flex-direction: column; box-shadow: 0 10px 30px rgba(0,0,0,0.3); }
-	.res-body { flex: 1; overflow-y: auto; font-size: 14px; line-height: 1.7; padding-right: 10px; color: #333; }
-	.btn-group { display: flex; flex-direction: column; gap: 8px; margin-top: 20px; }
 	.btn-down { background: #34a853; padding: 14px; font-size: 13px; }
 	.btn-close { background: #333; padding: 10px; font-size: 12px; }
 	:global(.highlight-text) { color: #1a73e8; font-weight: bold; margin-bottom: 12px; display: block; font-size: 15px; }
 	.loading { font-style: italic; color: #1a73e8; }
 	.fade-in { animation: fadeIn 0.4s ease-out; }
 	@keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+	.result-modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); z-index: 1000; display: flex; align-items: center; justify-content: center; padding: 20px; }
+	.modal-content { background: #fff; width: 100%; max-width: 420px; max-height: 85vh; border-radius: 25px; padding: 25px; display: flex; flex-direction: column; }
+	.res-body { flex: 1; overflow-y: auto; font-size: 14px; line-height: 1.7; padding-right: 10px; color: #333; }
+	.btn-group { display: flex; flex-direction: column; gap: 8px; margin-top: 20px; }
+	.file-row { margin-bottom: 8px; }
+	.file-row label { font-size: 11px; color: #1a73e8; background: #e8f0fe; padding: 6px 12px; border-radius: 12px; cursor: pointer; display: inline-block; font-weight: bold; }
+	.file-row input { display: none; }
 </style>
