@@ -1,22 +1,10 @@
 <script>
 	/**
-	 [ 뽀득 AI 전문 진단 시스템: 사장님의 설계 철학 ]
-	 * 1. "메뉴판만 보고 나가는 건 싫어요" (보안과 몰입)
-	 - 처음엔 큼직하게 4개 카테고리만 보여줘서 뽀득이 뭘 잘하는지 딱 보여줍니다.
-	 - 하지만 그 다음부턴 버튼 클릭이 아니라, 고객이 직접 자기 사연을 적게 만들었어요.
-	 - 이렇게 하면 경쟁사들이 우리 로직을 훔쳐보기도 어렵고, 고객은 진짜 상담받는 기분이 듭니다.
-	 * 2. "고객이 무슨 말을 할지 미리 알고 대답하기" (맥락 파악)
-	 - 고객이 '창틀'이라고만 써도, 우리 AI는 "아, 곰팡이 때문에 고민이시구나" 하고 눈치를 챕니다.
-	 - 그래서 다음 질문창에 "창틀 곰팡이 상태는 어떤가요?" 같은 맞춤형 가이드(Placeholder)를 띄워주죠.
-	 * 3. "번호 누르는 건 기계 같잖아요" (대화형 인터페이스)
-	 - 1번, 2번 버튼 누르는 대신 "이사 가시는 건지, 살면서 청소하시는 건지" 직접 단어로 입력받게 했습니다.
-	 - 예시에 없는 특이한 상황(예: 벽지 니코틴)을 입력해도 AI가 다 알아듣고 대응합니다.
-	 * 4. "한눈에 들어오는 깔끔한 첫인상" (2x2 그리드)
-	 - 첫 화면은 스마트폰에서 보기 편하게 2개씩 짝지어서 2행으로 딱 맞췄습니다.
-	 - 뽀득의 4대 핵심 서비스(공간유형, 오염처리, 분리수거, 마인드셋)가 한눈에 들어옵니다.
-	 * 5. "결국 중요한 건 전문가의 처방전" (리포트 발행)
-	 - 대화가 끝나면 사장님의 15년 노하우가 담긴 '진단서'가 나옵니다.
-	 - 사진까지 분석해서 작업자가 현장에서 꼭 봐야 할 체크리스트까지 뽑아주는 아주 똑똑한 녀석입니다.
+	 * [ 뽀득 AI 전문 진단 시스템 v3.0: 제로 카테고리 & 인간적 피드백 ]
+	 * 1. 제로 카테고리: 첫 화면에 버튼 대신 "어떤 도움이 필요하신가요?"라는 질문으로 시작.
+	 * 2. 자동 분류: 고객의 첫 마디를 분석해 [공간/오염/배출/마인드셋] 중 하나로 자동 배정.
+	 * 3. 공감 피드백: 고객의 답변을 받으면 "그 부분은 정말 신경 쓰이시겠네요" 같은 피드백 후 다음 질문.
+	 * 4. 채팅 집중 UI: 질문-답변-피드백이 하나의 흐름으로 이어지며 몰입감 극대화.
 	 */
 
 	import { onMount } from 'svelte';
@@ -24,31 +12,37 @@
 	let GoogleGenerativeAI;
 	let genAI;
 
-	let step = 1; 
-	let mainSelection = '';
-	let subTopic = ''; 
-	let placeholderText = '상세한 상황을 입력해주세요.';
-	let chatLog = [];
-
-	let userQuestion = '';
-	let resultHtml = '';
-	let isLoading = false;
-	let imageInput;
-
-	const mainOptions = [
-		{ id: 'space', label: '🏠 청소 공간 유형', desc: '이사/거주/부분' },
-		{ id: 'stain', label: '📍 세부 오염 처리', desc: '창틀, 주방, 욕실 등' },
-		{ id: 'recycle', label: '♻️ 분리수거/배출', desc: '배출 원칙, 방법' },
-		{ id: 'mind', label: '🧹 시작 마인드셋', desc: '동기부여, 루틴' }
+	// 상담 단계: 0(첫 인사), 1(주제 분석 및 분류), 2(상세 상황 질의), 3(최종 진단)
+	let step = 0;
+	let mainCategory = '';
+	let subTopic = '';
+	let userDetail = '';
+	let chatLog = [
+		{
+			role: 'ai',
+			text: '안녕하세요, 뽀득 AI 상담 도우미입니다. 😊\n어떤 청소나 정리가 고민이신가요? 편하게 말씀해 주시면 제가 진단을 도와드릴게요.'
+		}
 	];
 
-	const getDynamicGuide = (topic) => {
-		const t = topic.toLowerCase();
-		if (t.includes('창틀') || t.includes('베란다')) return "예: 창틀 하단 곰팡이가 심하고 외창에 찌든 먼지가 많습니다. 제거 가능한가요?";
-		if (t.includes('주방') || t.includes('욕실') || t.includes('후드')) return "예: 주방 후드 기름때가 딱딱하고, 욕실 타일 사이 변색이 심합니다.";
-		if (t.includes('이사') || t.includes('입주')) return "예: 24평형 신축 아파트 입주 예정입니다. 공사 분진 가루가 집안 전체에 가득합니다.";
-		if (t.includes('거주') || t.includes('부분') || t.includes('전체')) return "예: 거주 중인 집의 거실 바닥에 반려동물 얼룩과 냄새가 배어있어 특수 세척이 필요합니다.";
-		return `예: '${topic}' 관련하여 현재 상황(범위, 오염 정도 등)을 구체적으로 알려주시면 뽀득 전문가가 진단해 드립니다.`;
+	let userInput = '';
+	let isLoading = false;
+	let resultHtml = '';
+	let imageInput;
+
+	// 분류용 키워드 맵
+	const categoryMap = {
+		space: ['이사', '입주', '거주', '전체', '부분', '아파트', '빌라'],
+		stain: ['창틀', '곰팡이', '주방', '욕실', '기름때', '바닥', '얼룩', '니코틴'],
+		recycle: ['쓰레기', '분리수거', '가구', '가전', '버리기', '봉투', '배출'],
+		mind: ['귀찮', '막막', '포기', '방법', '루틴', '매일', '시작']
+	};
+
+	// 피드백 맵 (인간적인 반응)
+	const feedbackMsgs = {
+		space: '공간 전체를 돌보는 건 정말 큰 일이죠. 꼼꼼한 계획이 필요하겠네요.',
+		stain: '특정 구역의 오염은 눈에 띌 때마다 스트레스가 크셨을 것 같아요.',
+		recycle: '분리수거는 알면 쉽지만 모르면 정말 헷갈리는 부분이죠. 제가 짚어드릴게요.',
+		mind: '청소를 시작하려는 그 마음 자체가 이미 절반은 성공하신 거예요!'
 	};
 
 	onMount(async () => {
@@ -57,49 +51,57 @@
 			GoogleGenerativeAI = module.GoogleGenerativeAI;
 			const API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
 			if (API_KEY) genAI = new GoogleGenerativeAI(API_KEY);
-		} catch (e) { console.error("API 로드 실패", e); }
+		} catch (e) {
+			console.error('API 로드 실패', e);
+		}
 	});
 
-	function handleMainSelect(id) {
-		mainSelection = id;
-		let questionMsg = "";
-		
-		if (id === 'space') {
-			questionMsg = "청소 공간 유형에 대해 알려주세요. (예: 거주 공간 일부/전체, 일반 이사, 업체 입주 등)";
-		} else if (id === 'stain') {
-			questionMsg = "집중 진단이 필요한 오염 구역에 대해 알려주세요. (예: 창틀 및 베란다, 주방 및 욕실, 바닥 오염 등)";
-		} else if (id === 'recycle') {
-			questionMsg = "문의하실 분리수거 품목이나 배출 상황을 알려주세요. (예: 가전 배출, 플라스틱 분류 등)";
-		} else {
-			questionMsg = "어떤 마인드셋이나 실천 요령이 궁금하신가요? (예: 청소 동기부여, 매일 10분 루틴 등)";
+	// 첫 답변을 통한 카테고리 자동 분류 및 피드백
+	function processFirstInput() {
+		if (!userInput.trim()) return;
+
+		subTopic = userInput;
+		chatLog = [...chatLog, { role: 'user', text: userInput }];
+
+		// 키워드 분석으로 카테고리 매칭
+		mainCategory = 'stain'; // 기본값
+		for (const [cat, keywords] of Object.entries(categoryMap)) {
+			if (keywords.some((k) => userInput.includes(k))) {
+				mainCategory = cat;
+				break;
+			}
 		}
 
-		chatLog = [{ role: 'ai', text: questionMsg }];
-		step = 2;
-	}
+		const feedback = feedbackMsgs[mainCategory];
+		let nextQuestion = '';
 
-	function handleTopicSubmit() {
-		if (!subTopic.trim()) {
-			alert("상담 주제를 입력해주세요.");
-			return;
-		}
-		placeholderText = getDynamicGuide(subTopic);
-		chatLog = [...chatLog, 
-			{ role: 'user', text: subTopic },
-			{ role: 'ai', text: `'${subTopic}'(이)라고 말씀하셨군요. 전문가가 더 정확히 진단할 수 있게 상세 상황을 아래에 적어주세요.` }
-		];
-		step = 3;
+		if (mainCategory === 'space')
+			nextQuestion =
+				'현재 비어있는 집(이사/입주)인가요, 아니면 살고 계신 집인가요? 그리고 대략적인 평수도 알려주세요.';
+		else if (mainCategory === 'stain')
+			nextQuestion = '그 구역의 오염 상태는 어떤가요? (예: 곰팡이가 깊다, 기름때가 딱딱하다 등)';
+		else if (mainCategory === 'recycle')
+			nextQuestion = '어떤 물건을 버리려고 하시나요? 혹은 사진을 찍어 보여주셔도 좋습니다.';
+		else nextQuestion = '지금 가장 먼저 해결하고 싶은 한 곳만 고른다면 어디인가요?';
+
+		setTimeout(() => {
+			chatLog = [...chatLog, { role: 'ai', text: `${feedback}\n\n${nextQuestion}` }];
+			step = 2;
+			userInput = '';
+		}, 600);
 	}
 
 	async function runAI() {
-		if (!genAI) return;
+		if (!userInput.trim()) return;
+		userDetail = userInput;
+		chatLog = [...chatLog, { role: 'user', text: userInput }];
 		isLoading = true;
-		resultHtml = "뽀득 전문가 AI가 리포트를 작성 중입니다. 잠시만 기다려주세요...";
+		userInput = '';
 
 		try {
 			const model = genAI.getGenerativeModel({ model: 'gemini-flash-latest' });
-			const prompt = `[뽀득 전문가 모드]\n주제: ${subTopic}\n상황: ${userQuestion}\n[미션] 15년 경력 노하우를 담아 친절하면서도 전문적인 결함 체크리스트와 처방전을 작성할 것.`;
-			
+			const prompt = `[뽀득 전문가 모드]\n상황: ${subTopic} / 상세: ${userDetail}\n[미션] 사장님의 15년 노하우를 담아 아주 친절하고 전문적인 진단 리포트를 작성해줘.`;
+
 			let parts = [prompt];
 			if (imageInput?.files[0]) {
 				const base64 = await new Promise((r) => {
@@ -112,102 +114,254 @@
 
 			const result = await model.generateContent(parts);
 			resultHtml = `<strong>✨ 뽀득 전문 진단 리포트 ✨</strong><br><br>${result.response.text().replace(/\n/g, '<br>')}`;
-		} catch (e) { resultHtml = "진단 도중 문제가 생겼어요: " + e.message; }
-		finally { isLoading = false; }
+			chatLog = [
+				...chatLog,
+				{ role: 'ai', text: '분석을 마쳤습니다. 아래 리포트를 확인해 주세요!' }
+			];
+		} catch (e) {
+			chatLog = [
+				...chatLog,
+				{ role: 'ai', text: '죄송해요, 분석 중에 살짝 문제가 생겼어요. 다시 시도해 볼까요?' }
+			];
+		} finally {
+			isLoading = false;
+		}
 	}
 </script>
 
 <div class="app">
 	<header>
-		<div class="brand">BBODDEUK AI</div>
-		<h1>전문가 상담 서비스</h1>
+		<div class="brand">BBODDEUK EXPERT</div>
+		<h1>뽀득 AI 상담실</h1>
 	</header>
 
-	{#if step === 1}
-		<div class="main-grid">
-			{#each mainOptions as opt}
-				<button class="menu-card" on:click={() => handleMainSelect(opt.id)}>
-					<span class="icon">{opt.label.split(' ')[0]}</span>
-					<strong>{opt.label.split(' ').slice(1).join(' ')}</strong>
-					<p>{opt.desc}</p>
-				</button>
-			{/each}
-		</div>
-	{:else}
-		<div class="chat-flow">
-			{#each chatLog as chat}
-				<div class="msg {chat.role}">
-					<div class="bubble">{chat.text}</div>
+	<div class="chat-window">
+		{#each chatLog as chat}
+			<div class="msg {chat.role}">
+				<div
+					class="bubble {chat.role === 'ai' && chat.text.includes('진단 리포트')
+						? 'report-link'
+						: ''}"
+				>
+					{chat.text}
 				</div>
-			{/each}
+			</div>
+		{/each}
 
-			{#if step === 2}
-				<div class="input-row fade-in">
-					<input type="text" bind:value={subTopic} placeholder="여기에 내용을 써주세요..." on:keypress={(e)=>e.key==='Enter' && handleTopicSubmit()}/>
-					<button on:click={handleTopicSubmit}>전송</button>
-				</div>
-			{/if}
+		{#if isLoading}
+			<div class="msg ai">
+				<div class="bubble dot-loading">뽀득 전문가가 생각 중...</div>
+			</div>
+		{/if}
+	</div>
 
-			{#if step === 3}
-				<div class="final-form fade-in">
-					<div class="field">
-						<label>📸 현장 사진을 보여주시면 더 좋아요</label>
-						<input type="file" bind:this={imageInput} accept="image/*" />
-					</div>
-					<div class="field">
-						<textarea bind:value={userQuestion} placeholder={placeholderText}></textarea>
-					</div>
-					<div class="action-btns">
-						<button class="btn-reset" on:click={()=>{step=1; subTopic=''; userQuestion=''; resultHtml='';}}>처음으로</button>
-						<button class="btn-run" on:click={runAI} disabled={isLoading}>
-							{isLoading ? '뽀득 전문가 분석 중...' : '전문 진단서 받기'}
-						</button>
-					</div>
-				</div>
-			{/if}
+	<div class="input-area">
+		{#if step === 2}
+			<div class="file-upload fade-in">
+				<label for="file-pc">📸 현장 사진 첨부 (선택)</label>
+				<input type="file" id="file-pc" bind:this={imageInput} accept="image/*" />
+			</div>
+		{/if}
+
+		<div class="input-box">
+			<input
+				type="text"
+				bind:value={userInput}
+				placeholder={step === 0
+					? '예: 이사 청소 문의해요, 창틀 곰팡이 해결법...'
+					: '상세하게 말씀해 주세요...'}
+				on:keypress={(e) => e.key === 'Enter' && (step < 2 ? processFirstInput() : runAI())}
+			/>
+			<button on:click={() => (step < 2 ? processFirstInput() : runAI())} disabled={isLoading}>
+				전송
+			</button>
 		</div>
-	{/if}
+
+		{#if step > 0}
+			<button
+				class="btn-reset"
+				on:click={() => {
+					step = 0;
+					chatLog = [chatLog[0]];
+					resultHtml = '';
+					userInput = '';
+				}}>처음으로</button
+			>
+		{/if}
+	</div>
 
 	{#if resultHtml}
-		<div class="result-viewer fade-in">{@html resultHtml}</div>
+		<div class="result-viewer fade-in">
+			{@html resultHtml}
+			<button class="close-res" on:click={() => (resultHtml = '')}>닫기</button>
+		</div>
 	{/if}
 </div>
 
 <style>
-	:global(body) { background: #f4f6f9; font-family: 'Pretendard', sans-serif; padding: 20px; margin: 0; }
-	.app { max-width: 480px; margin: 0 auto; background: #fff; border-radius: 32px; padding: 30px; box-shadow: 0 10px 40px rgba(0,0,0,0.05); }
-	.brand { color: #1a73e8; font-weight: 800; font-size: 11px; letter-spacing: 1px; text-align: center; margin-bottom: 5px; }
-	h1 { font-size: 20px; text-align: center; margin: 0 0 30px 0; color: #222; }
+	:global(body) {
+		background: #f0f2f5;
+		font-family: 'Pretendard', sans-serif;
+		margin: 0;
+		padding: 0;
+	}
+	.app {
+		max-width: 500px;
+		margin: 0 auto;
+		background: #fff;
+		height: 100vh;
+		display: flex;
+		flex-direction: column;
+		position: relative;
+	}
 
-	.main-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
-	.menu-card { background: #fff; border: 1.5px solid #eee; border-radius: 20px; padding: 25px 10px; cursor: pointer; transition: 0.2s; border-bottom: 4px solid #eee; }
-	.menu-card:hover { border-color: #1a73e8; background: #f8fbff; transform: translateY(-3px); border-bottom-color: #1a73e8; }
-	.icon { font-size: 26px; display: block; margin-bottom: 12px; }
-	.menu-card strong { display: block; font-size: 14px; color: #333; margin-bottom: 6px; }
-	.menu-card p { font-size: 11px; color: #999; margin: 0; line-height: 1.4; }
+	header {
+		padding: 20px;
+		border-bottom: 1px solid #f0f0f0;
+		text-align: center;
+	}
+	.brand {
+		color: #1a73e8;
+		font-weight: 800;
+		font-size: 12px;
+		letter-spacing: 1px;
+	}
+	h1 {
+		font-size: 18px;
+		margin: 5px 0 0;
+		color: #333;
+	}
 
-	.chat-flow { display: flex; flex-direction: column; gap: 16px; }
-	.msg { display: flex; flex-direction: column; }
-	.msg.ai { align-items: flex-start; }
-	.msg.user { align-items: flex-end; }
-	.bubble { max-width: 85%; padding: 14px 18px; border-radius: 20px; font-size: 14px; line-height: 1.6; }
-	.msg.ai .bubble { background: #f1f3f4; color: #333; border-top-left-radius: 4px; }
-	.msg.user .bubble { background: #1a73e8; color: #fff; border-top-right-radius: 4px; }
+	.chat-window {
+		flex: 1;
+		overflow-y: auto;
+		padding: 20px;
+		display: flex;
+		flex-direction: column;
+		gap: 15px;
+		background: #f9f9f9;
+	}
+	.msg {
+		display: flex;
+		flex-direction: column;
+	}
+	.msg.ai {
+		align-items: flex-start;
+	}
+	.msg.user {
+		align-items: flex-end;
+	}
+	.bubble {
+		max-width: 80%;
+		padding: 12px 16px;
+		border-radius: 18px;
+		font-size: 14px;
+		line-height: 1.6;
+		white-space: pre-wrap;
+		position: relative;
+	}
+	.msg.ai .bubble {
+		background: #fff;
+		color: #333;
+		border-top-left-radius: 2px;
+		box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
+	}
+	.msg.user .bubble {
+		background: #1a73e8;
+		color: #fff;
+		border-top-right-radius: 2px;
+	}
 
-	.input-row { display: flex; gap: 8px; }
-	.input-row input { flex: 1; padding: 14px; border: 1.5px solid #ddd; border-radius: 16px; outline: none; }
-	.input-row button { background: #1a73e8; color: white; border: none; padding: 0 20px; border-radius: 16px; font-weight: bold; cursor: pointer; }
+	.input-area {
+		padding: 20px;
+		background: #fff;
+		border-top: 1px solid #eee;
+	}
+	.input-box {
+		display: flex;
+		gap: 10px;
+	}
+	input {
+		flex: 1;
+		padding: 12px 15px;
+		border: 1px solid #ddd;
+		border-radius: 25px;
+		outline: none;
+		font-size: 14px;
+	}
+	button {
+		background: #1a73e8;
+		color: white;
+		border: none;
+		padding: 10px 20px;
+		border-radius: 25px;
+		font-weight: bold;
+		cursor: pointer;
+	}
 
-	.final-form { background: #f8f9fa; padding: 20px; border-radius: 24px; margin-top: 10px; }
-	.field { margin-bottom: 15px; }
-	.field label { font-size: 12px; font-weight: bold; color: #666; display: block; margin-bottom: 10px; }
-	textarea { width: 100%; height: 130px; border: 1.5px solid #ddd; border-radius: 16px; padding: 15px; box-sizing: border-box; resize: none; font-size: 14px; outline: none; background: #fff; }
-	
-	.action-btns { display: flex; gap: 10px; margin-top: 15px; }
-	.btn-run { flex: 3; background: #1a73e8; color: #fff; border: none; padding: 16px; border-radius: 16px; font-weight: bold; cursor: pointer; }
-	.btn-reset { flex: 1; background: #fff; border: 1px solid #ddd; border-radius: 16px; cursor: pointer; font-size: 12px; }
+	.file-upload {
+		margin-bottom: 10px;
+	}
+	.file-upload label {
+		font-size: 12px;
+		color: #666;
+		font-weight: bold;
+		cursor: pointer;
+		display: inline-block;
+		padding: 5px 10px;
+		background: #f0f0f0;
+		border-radius: 10px;
+	}
+	.file-upload input {
+		display: none;
+	}
 
-	.result-viewer { margin-top: 30px; background: #fff; border: 2px solid #eef2f6; border-radius: 24px; padding: 25px; font-size: 14px; line-height: 1.8; color: #333; }
-	.fade-in { animation: fadeIn 0.4s ease-out; }
-	@keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+	.btn-reset {
+		width: 100%;
+		margin-top: 10px;
+		background: none;
+		color: #999;
+		font-size: 12px;
+		font-weight: normal;
+	}
+
+	.result-viewer {
+		position: absolute;
+		top: 10%;
+		left: 5%;
+		right: 5%;
+		bottom: 10%;
+		background: #fff;
+		border-radius: 25px;
+		box-shadow: 0 10px 50px rgba(0, 0, 0, 0.2);
+		padding: 30px;
+		overflow-y: auto;
+		z-index: 100;
+		border: 2px solid #1a73e8;
+	}
+	.close-res {
+		position: sticky;
+		bottom: 0;
+		width: 100%;
+		margin-top: 20px;
+		background: #333;
+	}
+
+	.dot-loading {
+		font-style: italic;
+		color: #888;
+	}
+	.fade-in {
+		animation: fadeIn 0.3s ease-in;
+	}
+	@keyframes fadeIn {
+		from {
+			opacity: 0;
+			transform: translateY(10px);
+		}
+		to {
+			opacity: 1;
+			transform: translateY(0);
+		}
+	}
 </style>
