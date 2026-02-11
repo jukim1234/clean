@@ -99,17 +99,19 @@
 			const model = genAI.getGenerativeModel({ model: 'gemini-flash-latest' });
 			// [업데이트된 뽀득 전용 인스트럭션]
 			const styleInstruction = `
-[역할] 15년 경력의 뽀득(BBODDEUK) 전담 청소 진단 전문가.
+[역할] 뽀득(BBODDEUK) 전담 청소 진단 전문가. 
 [뽀득 운영 철학] 
 1. 정직함과 논리적 인과관계 중시 (대표님의 대치동 강사 마인드 반영).
-2. 하청 없는 직영 시스템의 책임감 강조.
-[복합 상담 처리 원칙]
-1. 탈거 범위 문의: "눈에 보이는 곳만 닦지 않습니다." 하수구, 환풍구, 싱크대 걸레받이, 전등갓, 서랍장 등 분리 가능한 모든 곳의 '전체 탈거 세척' 원칙을 반드시 언급할 것.
-2. 비용 및 범위 문의: '외창(바깥 유리면) 및 난간'은 안전상 제외됨을 명확히 하고, 곰팡이/니코틴/시트지/과한 쓰레기 등은 현장 상태에 따라 공법과 약품이 달라지므로 추가 비용 가능성을 논리적으로 사전 고지할 것.
-3. 품질 강조: 모든 공정에 친환경 세제와 고온 스팀 살균 서비스가 기본 포함됨을 명시하여 안심시킬 것.
+2. 하청 없는 직영 시스템의 책임감.
 [응답 규칙]
-1. 별표(*)나 표(Table) 형식을 절대 사용하지 마세요. 깔끔한 텍스트 줄바꿈만 사용하세요.
-2. 마지막에 [작업자 현장 체크 리스트]를 작성하여 현장 팀이 챙겨야 할 '특수 약품, 장비, 주의사항'을 2~3줄로 요약하세요.
+1. 서두 인사나 자기소개, 운영 철학에 대한 긴 설명은 생략하고 **곧바로 구체적인 진단과 해결책**으로 시작하세요.
+2. 답변은 논리적이고 객관적이어야 하며, 군더더기 없는 담백한 말투를 사용하세요.
+3. [뽀득 원칙 필수 반영]:
+   - '탈거': 하수구, 환풍구, 걸레받이, 전등갓, 서랍장 등 분리 가능한 모든 곳의 '전체 탈거 세척' 원칙 명시.
+   - '범위': 외창(바깥 유리면) 및 난간은 안전상 제외됨을 명확히 고지.
+   - '추가비용': 곰팡이/니코틴/시트지/과한 쓰레기는 현장 오염도에 따라 추가 비용 가능성 사전 안내.
+   - '기본품질': 친환경 세제와 고온 스팀 살균은 기본 포함임.
+4. 별표(*)나 표(Table) 금지. 마지막에 [작업자 현장 체크 리스트] 2~3줄 요약 필수.
 `;
 
 			let prompt = `${styleInstruction}\n\n주제: ${subTopic}\n세부문의: ${userDetail}`;
@@ -185,6 +187,23 @@
 		a.download = `뽀득진단서_${currentReportId}.html`;
 		a.click();
 	}
+
+	// [2] 상담 초기화 함수 추가 (script 태그 내 적당한 위치에 삽입)
+	function resetConsultation() {
+		step = 0;
+		mainCategory = '';
+		subTopic = '';
+		userDetail = '';
+		currentReportId = '';
+		userInput = '';
+		chatLog = [
+			{ 
+				role: 'ai', 
+				text: "안녕하세요, 뽀득 AI 상담 도우미입니다. 😊\n어떤 부분의 청소가 고민이신가요? 우선 크게 고민되는 이슈를 간략히 말씀해 주시면 제가 다음 안내를 도와드릴게요.",
+				guide: "(예: 내 방 청소. 쓰레기가 많아요. / 방, 주방, 거실 청소 문의 / 창틀 곰팡이 고민 등)"
+			}
+		];
+	}
 </script>
 
 <div class="app">
@@ -225,6 +244,10 @@
 					<input type="text" bind:value={userInput} placeholder="내용을 입력해주세요..." on:keypress={(e) => e.key === 'Enter' && (step < 2 ? processFirstInput() : runAI())}/>
 					<button on:click={() => (step < 2 ? processFirstInput() : runAI())} disabled={isLoading}>전송</button>
 				</div>
+
+				{#if step > 0}
+					<button class="reset-btn fade-in" on:click={resetConsultation} style="margin-top: 10px; background: #666; width: 100%; font-size: 12px; padding: 8px;">🔄 새로운 상담 시작하기</button>
+				{/if}
 			</div>
 			{/if}
 		</div>
