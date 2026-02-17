@@ -1,12 +1,15 @@
 <script>
 	/**
-	 * [ 뽀득 AI 전문 진단 시스템 v3.4 최종 ]
+	 * [ 뽀드득클린 전문 진단 시스템 v3.4 최종 ]
 	 * 1. UI 가독성: 상담번호와 본문 사이 간격(빈 줄) 추가.
 	 * 2. 버튼 최적화: 저장 버튼 문구 간소화 및 상단 가이드 문구 수정.
 	 * 3. 리포트 정제: 하단 불필요한 안내 문구 삭제로 전문성 강화.
 	 */
 
 	import { onMount } from 'svelte';
+
+	export let data;
+	export let params;
 
 	let GoogleGenerativeAI;
 	let genAI;
@@ -19,7 +22,7 @@
 	let chatLog = [
 		{
 			role: 'ai',
-			text: '안녕하세요. 뽀득 AI 상담 도우미입니다. 😊\n어떤 부분의 청소가 고민이신가요? 우선 크게 고민되는 이슈를 간략히 말씀해 주시면 제가 다음 안내를 도와드릴게요.',
+			text: '안녕하세요. 뽀드득클린 상담 도우미입니다. 😊\n어떤 부분의 청소가 고민이신가요? 우선 크게 고민되는 이슈를 간략히 말씀해 주시면 제가 다음 안내를 도와드릴게요.',
 			guide:
 				'(예: 내 방 청소. 쓰레기가 많아요. / 방, 주방, 거실 청소 문의. 범위 선택 가능할지. / 기본적 청소 외에 창틀 곰팡이가 고민. / 분리 배출 방법이 너무 어려워요.)'
 		}
@@ -39,7 +42,8 @@
 	};
 
 	const feedbackMsgs = {
-		space: '공간 전체 혹은 핵심 구역을 정하는 게 우선이겠네요. 뽀득이 체계적으로 잡아드릴게요.',
+		space:
+			'공간 전체 혹은 핵심 구역을 정하는 게 우선이겠네요. 뽀드득클린이 체계적으로 잡아드릴게요.',
 		stain: '특정 구역의 찌든 오염은 전문가의 장비와 약품이 필요한 영역이죠. 잘 말씀해주셨습니다.',
 		recycle: '분리 배출은 환경에도 중요하지만 정작 하려면 참 막막하죠. 깔끔하게 정리해 드릴게요.',
 		mind: '청소를 결심하신 것만으로도 대단하십니다. 가벼운 마음으로 시작하실 수 있게 도와드릴게요.'
@@ -50,7 +54,10 @@
 			const module = await import('https://esm.run/@google/generative-ai');
 			GoogleGenerativeAI = module.GoogleGenerativeAI;
 			const API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
-			if (API_KEY) genAI = new GoogleGenerativeAI(API_KEY);
+			// : 여기서는 Settings>Environment Variables 찾아서 키명, 값 입력해도 이상하게 작동 안해서, .env 에 넣었다.
+			if (API_KEY) {
+				genAI = new GoogleGenerativeAI(API_KEY);
+			}
 		} catch (e) {
 			console.error('API 로드 실패', e);
 		}
@@ -80,12 +87,12 @@
 		let nextQuestion = '';
 		if (mainCategory === 'space')
 			nextQuestion =
-				'현재 비어있는 집인가요, 아니면 살고 계신 상태인가요? 평수나 특이사항이 있다면 말씀해주세요.';
+				'대략적인 평수, 쓰레기 양이나 오염도 등 특이사항을 알려주시면 바로 맞춤형 상담을 도와드리겠습니다.';
 		else if (mainCategory === 'stain')
 			nextQuestion =
-				'해당 오염이 발생한 지 얼마나 되었나요? 혹은 사진을 첨부해주시면 더 정확합니다.';
+				'해당 오염이 발생한 지 얼마나 되었나요? 오염 범위나 사진을 함께 보내주시면 더 정확한 진단이 가능합니다.';
 		else if (mainCategory === 'recycle')
-			nextQuestion = '버리시려는 물건의 종류나 대략적인 양을 말씀해주시겠어요?';
+			nextQuestion = '버리시려는 물건의 크기나 종류, 대략적인 양을 말씀해 주시겠어요?';
 		else
 			nextQuestion = '지금 당장 5분만 투자한다면 가장 먼저 깨끗하게 만들고 싶은 곳은 어디인가요?';
 
@@ -97,6 +104,8 @@
 	}
 
 	async function runAI() {
+		console.log('현재 genAI 상태:', genAI);
+
 		if (!userInput.trim()) return;
 		userDetail = userInput;
 		chatLog = [...chatLog, { role: 'user', text: userDetail }];
@@ -106,16 +115,16 @@
 
 		try {
 			const model = genAI.getGenerativeModel({ model: 'gemini-flash-latest' });
-			// [업데이트된 뽀득 전용 인스트럭션]
+			// [업데이트된 뽀드득클린 전용 인스트럭션]
 			const styleInstruction = `
-[역할] 뽀득(BBODDEUK) 전담 청소 진단 전문가. 
-[뽀득 운영 철학] 
+[역할] 뽀드득클린(BBODDEUK) 전담 청소 진단 전문가. 
+[뽀드득클린 운영 철학] 
 1. 정직함과 논리적 인과관계 중시 (대표님의 대치동 강사 마인드 반영).
 2. 하청 없는 직영 시스템의 책임감.
 [응답 규칙]
 1. 서두 인사나 자기소개, 운영 철학에 대한 긴 설명은 생략하고 **곧바로 구체적인 진단과 해결책**으로 시작하세요.
 2. 답변은 논리적이고 객관적이어야 하며, 군더더기 없는 담백한 말투를 사용하세요.
-3. [뽀득 원칙 필수 반영]:
+3. [뽀드득클린 원칙 필수 반영]:
    - '탈거': 하수구, 환풍구, 걸레받이, 전등갓, 서랍장 등 분리 가능한 모든 곳의 '전체 탈거 세척' 원칙 명시.
    - '범위': 외창(바깥 유리면) 및 난간은 안전상 제외됨을 명확히 고지.
    - '추가비용': 곰팡이/니코틴/시트지/과한 쓰레기는 현장 오염도에 따라 추가 비용 가능성 사전 안내.
@@ -154,6 +163,7 @@
 				}
 			];
 		} catch (e) {
+			console.error('진짜 에러 원인:', e);
 			chatLog = [...chatLog, { role: 'ai', text: '죄송합니다. 분석 중 오류가 발생했습니다.' }];
 		} finally {
 			isLoading = false;
@@ -175,7 +185,7 @@
 		const reportHtml = `
 		<!DOCTYPE html>
 		<html>
-		<head><meta charset="utf-8"><title>뽀득 AI 진단서</title>
+		<head><meta charset="utf-8"><title>뽀드득클린 진단서</title>
 		<style>
 			body { font-family: sans-serif; line-height: 1.6; color: #333; padding: 20px; background: #f5f5f5; }
 			.paper { background: #fff; padding: 40px; max-width: 700px; margin: 0 auto; border-top: 8px solid #1a73e8; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
@@ -187,7 +197,7 @@
 		</head>
 		<body>
 			<div class="paper">
-				<h1 class="title">AI 청소 사전 진단 리포트</h1>
+				<h1 class="title">청소 사전 진단 리포트</h1>
 				<div class="meta">관리 번호: ${currentReportId}<br>일시: ${date}</div>
 				
 				<div class="section-title">상담 요약</div>
@@ -205,7 +215,7 @@
 		const url = URL.createObjectURL(blob);
 		const a = document.createElement('a');
 		a.href = url;
-		a.download = `뽀득진단서_${currentReportId}.html`;
+		a.download = `뽀드득클린진단서_${currentReportId}.html`;
 		a.click();
 	}
 
@@ -220,7 +230,7 @@
 		chatLog = [
 			{
 				role: 'ai',
-				text: '안녕하세요, 뽀득 AI 상담 도우미입니다. 😊\n어떤 부분의 청소가 고민이신가요? 우선 크게 고민되는 이슈를 간략히 말씀해 주시면 제가 다음 안내를 도와드릴게요.',
+				text: '안녕하세요, 뽀드득클린 상담 도우미입니다. 😊\n어떤 부분의 청소가 고민이신가요? 우선 크게 고민되는 이슈를 간략히 말씀해 주시면 제가 다음 안내를 도와드릴게요.',
 				guide: '(예: 내 방 청소. 쓰레기가 많아요. / 방, 주방, 거실 청소 문의 / 창틀 곰팡이 고민 등)'
 			}
 		];
@@ -230,7 +240,7 @@
 <div class="app">
 	<header>
 		<div class="brand">BBODDEUK EXPERT</div>
-		<h1>뽀득 AI 상담실</h1>
+		<h1>뽀드득클린 상담실</h1>
 	</header>
 
 	<div class="chat-container">
