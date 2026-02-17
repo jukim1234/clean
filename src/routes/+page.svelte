@@ -1,9 +1,9 @@
 <script>
 	/**
-	 * [ 뽀드득클린 전문 진단 시스템 v3.4 최종 ]
-	 * 1. UI 가독성: 상담번호와 본문 사이 간격(빈 줄) 추가.
-	 * 2. 버튼 최적화: 저장 버튼 문구 간소화 및 상단 가이드 문구 수정.
-	 * 3. 리포트 정제: 하단 불필요한 안내 문구 삭제로 전문성 강화.
+	 * [ 뽀드득클린 전문 진단 시스템 v3.5 보안 강화형 ]
+	 * 1. 보안 최적화: 브라우저 직접 호출을 중단하고 서버(/api/chat) 호출 방식으로 전환.
+	 * 2. 가독성: 불필요한 라이브러리 임포트 및 API 키 노출 로직 제거.
+	 * 3. 로직 간소화: 클라이언트에서 실행되던 AI 분석 엔진을 서버로 위임.
 	 */
 
 	import { onMount } from 'svelte';
@@ -11,11 +11,8 @@
 	export let data;
 	export let params;
 
-	let GoogleGenerativeAI;
-	let genAI;
-
+	// [수정] 클라이언트에서 직접 AI 라이브러리를 사용하지 않으므로 변수 제거
 	let step = 0;
-	let mainCategory = '';
 	let subTopic = '';
 	let userDetail = '';
 	let currentReportId = '';
@@ -34,21 +31,22 @@
 	let rawAiResponse = '';
 	let imageInput;
 
-	// : 기존 categoryMap 및 feedbackMsgs 삭제 (AI가 직접 판단하므로 불필요)
+	// [핵심 추가] 서버 엔드포인트와 통신하는 함수
+	async function callAiServer(prompt, imageData = null) {
+		const response = await fetch('/api/chat', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ prompt, imageData })
+		});
 
-	onMount(async () => {
-		try {
-			const module = await import('https://esm.run/@google/generative-ai');
-			GoogleGenerativeAI = module.GoogleGenerativeAI;
-			const API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
-			// : 여기서는 Settings>Environment Variables 찾아서 키명, 값 입력해도 이상하게 작동 안해서, .env 에 넣었다.
-			if (API_KEY) {
-				genAI = new GoogleGenerativeAI(API_KEY);
-			}
-		} catch (e) {
-			console.error('API 로드 실패', e);
+		if (!response.ok) {
+			const error = await response.json();
+			throw new Error(error.error || '통신 오류');
 		}
-	});
+
+		const result = await response.json();
+		return result.text;
+	}
 
 	function generateReportId() {
 		const now = new Date();
@@ -57,7 +55,7 @@
 		return `${dateStr}-${randomStr}`;
 	}
 
-	// [수정] 1차 상담 단계: AI가 문의 내용을 분석하여 유동적인 가이드 제공 (고정 로직 제거)
+	// [수정] 1차 상담 단계: 서버 엔드포인트를 호출하도록 변경
 	async function processFirstInput() {
 		if (!userInput.trim()) return;
 		subTopic = userInput;
@@ -67,7 +65,6 @@
 		userInput = '';
 
 		try {
-			const model = genAI.getGenerativeModel({ model: 'gemini-flash-latest' });
 			const guidePrompt = `
 [역할] 전문 청소 상담사. 
 [목적] 고객의 첫 문의 내용을 확인하고, 더 정확한 진단을 위해 필요한 '추가 정보'를 정중하고 신뢰감 있게 요청하세요.
@@ -77,22 +74,24 @@
 3. 응답은 2~3문장 이내로 간결하게 작성하세요.
 [고객문의]: ${tempInput}
 `;
-			const result = await model.generateContent(guidePrompt);
-			const aiGuide = result.response.text();
+			// 서버에 요청
+			const aiGuide = await callAiServer(guidePrompt);
 
 			chatLog = [...chatLog, { role: 'ai', text: aiGuide }];
 			step = 2;
 		} catch (e) {
 			console.error('1차 가이드 생성 오류:', e);
-			chatLog = [...chatLog, { role: 'ai', text: '죄송합니다. 상담 가이드를 생성하는 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.' }];
+			chatLog = [
+				...chatLog,
+				{ role: 'ai', text: '죄송합니다. 상담 시스템과 통신 중 오류가 발생했습니다.' }
+			];
 		} finally {
 			isLoading = false;
 		}
 	}
 
+	// [수정] 2차 리포트 생성: 서버 엔드포인트를 호출하도록 변경
 	async function runAI() {
-		console.log('현재 genAI 상태:', genAI);
-
 		if (!userInput.trim()) return;
 		userDetail = userInput;
 		chatLog = [...chatLog, { role: 'user', text: userDetail }];
@@ -101,41 +100,34 @@
 		currentReportId = generateReportId();
 
 		try {
-			const model = genAI.getGenerativeModel({ model: 'gemini-flash-latest' });
-			// [업데이트된 뽀드득클린 전용 인스트럭션]
 			const styleInstruction = `
 [역할] 뽀드득클린(BBODDEUK) 전담 청소 진단 전문가. 
 [뽀드득클린 운영 철학] 
-1. 정직함과 논리적 인과관계 중시 (대표님의 대치동 강사 마인드 반영).
+1. 정직함과 논리적 인과관계 중시.
 2. 하청 없는 직영 시스템의 책임감.
 [응답 규칙]
-1. 서두 인사나 자기소개, 운영 철학에 대한 긴 설명은 생략하고 **곧바로 구체적인 진단과 해결책**으로 시작하세요.
-2. 답변은 논리적이고 객관적이어야 하며, 군더더기 없는 담백한 말투를 사용하세요.
-3. [뽀드득클린 원칙 필수 반영]:
-   - '탈거': 하수구, 환풍구, 걸레받이, 전등갓, 서랍장 등 분리 가능한 모든 곳의 '전체 탈거 세척' 원칙 명시.
-   - '범위': 외창(바깥 유리면) 및 난간은 안전상 제외됨을 명확히 고지.
-   - '추가비용': 곰팡이/니코틴/시트지/과한 쓰레기는 현장 오염도에 따라 추가 비용 가능성 사전 안내.
-   - '기본품질': 친환경 세제와 고온 스팀 살균은 기본 포함임.
-4. 별표(*)나 표(Table) 금지. 마지막에 [작업자 현장 체크 리스트] 2~3줄 요약 필수.
+1. 서두 생략, 곧바로 해결책 시작.
+2. 담백한 말투 사용.
+3. '탈거', '범위', '추가비용', '기본품질' 원칙 필수 반영.
+4. 마지막에 [작업자 현장 체크 리스트] 2~3줄 요약 필수.
 `;
-
 			let prompt = `${styleInstruction}\n\n주제: ${subTopic}\n세부문의: ${userDetail}`;
 
-			let parts = [prompt];
+			// 이미지 데이터 처리 (있는 경우)
+			let imageData = null;
 			if (imageInput?.files[0]) {
-				const base64 = await new Promise((r) => {
+				imageData = await new Promise((r) => {
 					const reader = new FileReader();
 					reader.onloadend = () => r(reader.result.split(',')[1]);
 					reader.readAsDataURL(imageInput.files[0]);
 				});
-				parts.push({ inlineData: { data: base64, mimeType: imageInput.files[0].type } });
 			}
 
-			const result = await model.generateContent(parts);
-			rawAiResponse = result.response.text().replace(/\*\*/g, '').replace(/\|/g, '');
+			// 서버에 요청
+			rawAiResponse = await callAiServer(prompt, imageData);
+			rawAiResponse = rawAiResponse.replace(/\*\*/g, '').replace(/\|/g, '');
 
 			const fixedHeader = `<span class="highlight-text">진단이 완료되었습니다. 아래 리포트를 저장하여 채팅 상담 시 전달해 주세요.</span>\n`;
-			// 상담번호 다음에 빈 줄 한 줄 추가 (<br><br>)
 			resultHtml =
 				fixedHeader +
 				`<span style="font-size:12px;color:#888;">상담번호: ${currentReportId}</span><br><br>` +
@@ -150,8 +142,8 @@
 				}
 			];
 		} catch (e) {
-			console.error('진짜 에러 원인:', e);
-			chatLog = [...chatLog, { role: 'ai', text: '죄송합니다. 분석 중 오류가 발생했습니다.' }];
+			console.error('분석 오류:', e);
+			chatLog = [...chatLog, { role: 'ai', text: '분석 중 오류가 발생했습니다.' }];
 		} finally {
 			isLoading = false;
 		}
@@ -208,7 +200,6 @@
 
 	function resetConsultation() {
 		step = 0;
-		mainCategory = '';
 		subTopic = '';
 		userDetail = '';
 		currentReportId = '';
