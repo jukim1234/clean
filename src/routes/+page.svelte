@@ -34,20 +34,7 @@
 	let rawAiResponse = '';
 	let imageInput;
 
-	const categoryMap = {
-		space: ['이사', '입주', '거주', '전체', '부분', '아파트', '방', '문의', '범위'],
-		stain: ['창틀', '곰팡이', '주방', '욕실', '기름때', '바닥', '얼룩', '니코틴'],
-		recycle: ['쓰레기', '분리수거', '가구', '가전', '버리기', '배출', '방법'],
-		mind: ['귀찮', '막막', '포기', '루틴', '매일', '시작']
-	};
-
-	const feedbackMsgs = {
-		space:
-			'공간 전체 혹은 핵심 구역을 정하는 게 우선이겠네요. 뽀드득클린이 체계적으로 잡아드릴게요.',
-		stain: '특정 구역의 찌든 오염은 전문가의 장비와 약품이 필요한 영역이죠. 잘 말씀해주셨습니다.',
-		recycle: '분리 배출은 환경에도 중요하지만 정작 하려면 참 막막하죠. 깔끔하게 정리해 드릴게요.',
-		mind: '청소를 결심하신 것만으로도 대단하십니다. 가벼운 마음으로 시작하실 수 있게 도와드릴게요.'
-	};
+	// : 기존 categoryMap 및 feedbackMsgs 삭제 (AI가 직접 판단하므로 불필요)
 
 	onMount(async () => {
 		try {
@@ -70,37 +57,37 @@
 		return `${dateStr}-${randomStr}`;
 	}
 
-	function processFirstInput() {
+	// [수정] 1차 상담 단계: AI가 문의 내용을 분석하여 유동적인 가이드 제공 (고정 로직 제거)
+	async function processFirstInput() {
 		if (!userInput.trim()) return;
 		subTopic = userInput;
 		chatLog = [...chatLog, { role: 'user', text: userInput }];
+		isLoading = true;
+		const tempInput = userInput;
+		userInput = '';
 
-		mainCategory = 'stain';
-		for (const [cat, keywords] of Object.entries(categoryMap)) {
-			if (keywords.some((k) => userInput.includes(k))) {
-				mainCategory = cat;
-				break;
-			}
-		}
+		try {
+			const model = genAI.getGenerativeModel({ model: 'gemini-flash-latest' });
+			const guidePrompt = `
+[역할] 전문 청소 상담사. 
+[목적] 고객의 첫 문의 내용을 확인하고, 더 정확한 진단을 위해 필요한 '추가 정보'를 정중하고 신뢰감 있게 요청하세요.
+[규칙] 
+1. 과한 미사여구 없이 담백하고 전문적인 용어를 사용하세요.
+2. 고객의 고민에 공감한 뒤, 평수/오염도/특이사항 중 해당 상황에 필요한 내용을 질문하세요.
+3. 응답은 2~3문장 이내로 간결하게 작성하세요.
+[고객문의]: ${tempInput}
+`;
+			const result = await model.generateContent(guidePrompt);
+			const aiGuide = result.response.text();
 
-		const feedback = feedbackMsgs[mainCategory];
-		let nextQuestion = '';
-		if (mainCategory === 'space')
-			nextQuestion =
-				'대략적인 평수, 쓰레기 양이나 오염도 등 특이사항을 알려주시면 바로 맞춤형 상담을 도와드리겠습니다.';
-		else if (mainCategory === 'stain')
-			nextQuestion =
-				'해당 오염이 발생한 지 얼마나 되었나요? 오염 범위나 사진을 함께 보내주시면 더 정확한 진단이 가능합니다.';
-		else if (mainCategory === 'recycle')
-			nextQuestion = '버리시려는 물건의 크기나 종류, 대략적인 양을 말씀해 주시겠어요?';
-		else
-			nextQuestion = '지금 당장 5분만 투자한다면 가장 먼저 깨끗하게 만들고 싶은 곳은 어디인가요?';
-
-		setTimeout(() => {
-			chatLog = [...chatLog, { role: 'ai', text: `${feedback}\n\n${nextQuestion}` }];
+			chatLog = [...chatLog, { role: 'ai', text: aiGuide }];
 			step = 2;
-			userInput = '';
-		}, 600);
+		} catch (e) {
+			console.error('1차 가이드 생성 오류:', e);
+			chatLog = [...chatLog, { role: 'ai', text: '죄송합니다. 상담 가이드를 생성하는 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.' }];
+		} finally {
+			isLoading = false;
+		}
 	}
 
 	async function runAI() {
@@ -219,7 +206,6 @@
 		a.click();
 	}
 
-	// [2] 상담 초기화 함수 추가 (script 태그 내 적당한 위치에 삽입)
 	function resetConsultation() {
 		step = 0;
 		mainCategory = '';
@@ -227,6 +213,9 @@
 		userDetail = '';
 		currentReportId = '';
 		userInput = '';
+		if (imageInput) imageInput.value = '';
+		resultHtml = '';
+		rawAiResponse = '';
 		chatLog = [
 			{
 				role: 'ai',
